@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interaktivni sinopsis: Mir i dobro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json"> <!-- Dodan link na manifest datoteku -->
+    <!-- Chosen Palette: Warm Parchment (bg-stone-100), Stone Gray (text-stone-800), White (bg-white), Golden Amber (bg-amber-600, text-amber-700, chart colors) with subtle patterned background. -->
+    <!-- Application Structure Plan: A single-page application with a fixed sidebar navigation for main segments. Each segment section on the right will contain expandable/collapsible details for 'Vizual', 'Sadržaj', and 'Zvuk'. A 'Pregled trajanja' section with a horizontal bar chart provides a visual overview of show pacing. This structure allows users to quickly jump between segments and drill down into specific details, enhancing understanding of the show's flow and content. -->
+    <!-- Visualization & Content Choices: Report Info: TV show segments and their timings. -> Goal: Provide clear structural overview. -> Viz/Method: Fixed sidebar navigation (HTML/CSS/JS) and distinct main content sections. -> Interaction: Click navigation links for smooth scrolling to sections. Report Info: Detailed descriptions of visual, content, and audio elements per segment. -> Goal: Allow detailed exploration without cluttering the main view. -> Viz/Viz/Method: Accordion-style expandable/collapsible sections (HTML/CSS/JS). -> Interaction: Click headers to toggle visibility. Report Info: Duration of each segment. -> Goal: Visually represent show pacing and time allocation. -> Viz/Method: Horizontal Bar Chart (Chart.js/Canvas). -> Interaction: Hover for tooltips. -> Justification: Intuitive visual summary of time distribution. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            background-color: #f5f5f4; /* stone-100, bež tonovi */
+            color: #292524; /* stone-800 */
+            font-family: 'Source Sans 3', sans-serif;
+        }
+        h1, h2, h3, h4 {
+            font-family: 'Playfair Display', serif;
+        }
+        .accordion-header {
+            cursor: pointer;
+            user-select: none;
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .accordion-content.active {
+            max-height: 500px; /* Adjust based on max expected content height */
+            transition: max-height 0.5s ease-in;
+        }
+        .accordion-content p {
+            line-height: 1.75; /* Slightly more space between lines */
+            overflow-wrap: break-word; /* Ensures long words break to prevent horizontal overflow */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px; /* Adjusted max width for chart to fit wider main content */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 400px; /* Max height */
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        /* Subtle background pattern (ornamentika) */
+        .background-pattern {
+            background-image: repeating-linear-gradient(45deg, rgba(231,229,228,0.25) 0px, rgba(231,229,228,0.25) 1px, transparent 1px, transparent 10px), repeating-linear-gradient(-45deg, rgba(231,229,228,0.25) 0px, rgba(231,229,228,0.25) 1px, transparent 1px, transparent 10px);
+            background-color: #f5f5f4; /* Base beige color */
+        }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row antialiased">
+    <!-- Background pattern layer -->
+    <div class="fixed inset-0 -z-10 background-pattern"></div>
+
+    <nav class="bg-amber-600 text-white p-4 md:w-72 flex-shrink-0 md:h-screen md:sticky md:top-0 overflow-y-auto shadow-lg">
+        <div class="md:hidden flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">Izbornik</h2>
+            <button id="mobile-menu-toggle" class="text-white text-2xl focus:outline-none">☰</button>
+        </div>
+        <ul id="nav-links" class="hidden md:block space-y-2">
+            <li><a href="#overview" class="block py-2 px-3 rounded-md hover:bg-amber-700 transition">Pregled emisije</a></li>
+            <!-- Navigation links will be dynamically generated here -->
+        </ul>
+    </nav>
+
+    <main id="main-content" class="flex-grow p-4 md:p-8 max-w-5xl mx-auto md:ml-0 md:mr-auto">
+
+        <section id="overview" class="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-8">
+            <h2 class="text-3xl font-bold text-stone-900 mb-4"></h2>
+            <p class="text-stone-700 leading-relaxed mb-4"></p>
+            <ul class="list-disc list-inside text-stone-600 space-y-1">
+                <li>**Trajanje emisije:** <span id="overview-duration"></span></li>
+                <li>**Ciljana publika:** <span id="overview-audience"></span></li>
+                <li>**Koncepcija:** <span id="overview-conception"></span></li>
+            </ul>
+        </section>
+
+        <!-- Segments will be dynamically generated here -->
+
+        <section id="duration-summary" class="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-8">
+            <h3 class="text-2xl font-bold text-amber-700 mb-4">Sažetak trajanja segmenata</h3>
+            <p class="text-stone-700 leading-relaxed mb-4">
+                Ovaj grafikon prikazuje raspodjelu vremena unutar 25-minutne emisije, pružajući vizualni pregled dramaturške dinamike.
+            </p>
+            <div class="chart-container relative mx-auto">
+                <canvas id="durationChart"></canvas>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="text-center py-6 mt-8 bg-white/50 w-full">
+        <p class="text-sm text-stone-500">Autor: Neven Mihael Dianežević</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const navLinksContainer = document.getElementById('nav-links');
+            const mainContent = document.getElementById('main-content');
+            const overviewSection = document.getElementById('overview');
+            const overviewTitle = overviewSection.querySelector('h2');
+            const overviewDescription = overviewSection.querySelector('p');
+            const overviewDuration = document.getElementById('overview-duration');
+            const overviewAudience = document.getElementById('overview-audience');
+            const overviewConception = document.getElementById('overview-conception');
+
+            // Embedded JSON data
+            const data = {
+              "generalInfo": {
+                "title": "Emisija 'Mir i dobro'",
+                "description": "Ovaj interaktivni sinopsis pruža detaljan uvid u režijski koncept i strukturu emisije 'Mir i dobro'. Istražite svaki segment, vizualne i zvučne elemente te sadržaj priloga kako biste razumjeli dinamiku i poruku emisije.",
+                "duration": "Točno 25 minuta",
+                "targetAudience": "50+, s potencijalom privlačenja mlađih generacija",
+                "conception": "Vrlo dinamična emisija s četiri priloga fleksibilnog trajanja (3-6 minuta), fokusirana na raznolike teme Katoličke crkve."
+              },
+              "segments": [
+                {
+                  "id": "segment-1",
+                  "title": "Segment 1: Uvod i 'Tjedan iza nas'",
+                  "durationMinutes": 3,
+                  "subsegments": [
+                    {
+                      "title": "Najavna špica (00:00 - 00:30)",
+                      "visual": "Prikaz putovanja svjetla ili mira kroz simbole i ambijente. Apstraktni, eterični elementi (maglica, svjetlosni odsjaji) formiraju se u stilizirane simbole mira, duhovnosti ili vjere (golub, maslinova grančica, križ). Kratki kadrovi crkava i prirodnih ljepota. Dominiraju umirujuće, bogate boje: zlatna, prigušena plava, bijela, bež tonovi, s akcentima boja dragulja.",
+                      "sound": "Eterična, zborna glazba s modernim orkestralnim elementima ili nježnom elektronskom podlogom. Stvara osjećaj uzvišenosti i mira, s jasnim početkom i završetkom.",
+                      "content": null
+                    },
+                    {
+                      "title": "Voditeljska riječ (00:30 - 01:00)",
+                      "visual": null,
+                      "sound": null,
+                      "content": "Dobar dan dragi gledatelji i dobrodošli u novo izdanje 'Mira i dobra'! Danas ćemo se posvetiti temama koje dotiču našu vjeru i svakodnevni život. Ostanite s nama..."
+                    },
+                    {
+                      "title": "Vatikanski puls (01:00 - 03:00)",
+                      "visual": "Dinamičan, montirani prilog. Kratki, udarni kadrovi Papinih aktivnosti, ključne vijesti iz vatikanskih dikasterija. Upotreba animirane grafike za kratke natpise. Kratak video isječak Papinog 'Urbi et Orbi' s ključnom rečenicom prevedenom na ekranu.",
+                      "sound": null,
+                      "content": "Vrlo brz i sažet pregled najvažnijih vijesti iz Vatikana i Papinih poruka, prilagođen da bude informativan i za stariju publiku, s naglaskom na duhovni značaj."
+                    }
+                  ]
+                },
+                {
+                  "id": "segment-2",
+                  "title": "Segment 2: Prilog 1",
+                  "durationMinutes": 5.5,
+                  "subsegments": [
+                    {
+                      "title": "Voditeljska najava priloga (03:00 - 03:30)",
+                      "visual": null,
+                      "sound": null,
+                      "content": "U našoj prvoj priči, dublje ćemo istražiti [uvod u temu, npr. blagdan koji dolazi i njegove običaje u našim krajevima, ili sveobuhvatnu inicijativu za pomoć potrebitima]."
+                    },
+                    {
+                      "title": "Prilog 1: Istraživačka priča / Glavna reportaža (5 minuta)",
+                      "visual": "Detaljna reportaža s terena, vizualno bogata s kreativnim kadriranjem i detaljima. Intervjui s relevantnim osobama. Upotreba čistih potpisa s imenima i titulama.",
+                      "sound": null,
+                      "content": "Priča o dubokoj povijesti i suvremenom značaju nekog velikog marijanskog svetišta i njegovom utjecaju na vjernički život, uz arhivske snimke i svjedočanstva hodočasnika."
+                    }
+                  ]
+                },
+                {
+                  "id": "segment-3",
+                  "title": "Segment 3: Prilog 2",
+                  "durationMinutes": 3.5,
+                  "subsegments": [
+                    {
+                      "title": "Voditeljska najava priloga (08:30 - 09:00)",
+                      "visual": null,
+                      "sound": null,
+                      "content": "Naša sljedeća priča donosi nam [uvod u temu, npr. pogled u povijest nekog sakralnog objekta, ili svjedočanstvo vjere]."
+                    },
+                    {
+                      "title": "Prilog 2: Kulturna baština / Osobno svjedočanstvo (3 minute)",
+                      "visual": "Kratka, ali fokusirana reportaža.",
+                      "sound": null,
+                      "content": "Priča o restauraciji vrijedne oltarne slike u maloj župnoj crkvi, gdje se ističe umjetnička i vjerska vrijednost, ili kratko i dirljivo svjedočanstvo vjernika o tome kako im je vjera pomogla prebroditi osobne izazove."
+                    }
+                  ]
+                },
+                {
+                  "id": "segment-4",
+                  "title": "Segment 4: Prilog 3",
+                  "durationMinutes": 5.5,
+                  "subsegments": [
+                    {
+                      "title": "Voditeljska najava priloga (12:00 - 12:30)",
+                      "visual": null,
+                      "sound": null,
+                      "content": "Sada ćemo se posvetiti [uvod u temu, npr. ulozi župe u zajednici, ili crkvenom doprinosu ekologiji]."
+                    },
+                    {
+                      "title": "Prilog 3: Župni život / Društveni angažman Crkve (5 minuta)",
+                      "visual": "Reportaža koja prikazuje živost župne zajednice ili crkvene inicijative koje promiču socijalnu pravdu/ekologiju.",
+                      "sound": null,
+                      "content": "Detaljna priča o inovativnom pastoralnom programu koji je pokrenula neka župa kako bi privukla različite generacije, ili o ekološkoj inicijativi koju vodi redovnička zajednica."
+                    }
+                  ]
+                },
+                {
+                  "id": "segment-5",
+                  "title": "Segment 5: Prilog 4 i odjava",
+                  "durationMinutes": 7.5,
+                  "subsegments": [
+                    {
+                      "title": "Voditeljska najava priloga (17:30 - 18:00)",
+                      "visual": null,
+                      "sound": null,
+                      "content": "Za kraj emisije, donosimo vam [uvod u temu, npr. nadahnjujuću 'dobru vijest' tjedna i pregled kratkih crkvenih događanja]."
+                    },
+                    {
+                      "title": "Prilog 4: 'Dobra vijest' / Kratke crkvene vijesti (4 minute i 30 sekundi)",
+                      "visual": "Kombinira dužu, vizualno bogatu 'dobru vijest' (npr. priča o izvanrednom volonterskom pothvatu) i/ili dinamičan blok s kratkim crkvenim vijestima (fotografije s natpisima, kratki video isječci).",
+                      "sound": null,
+                      "content": "Detaljna, inspirativna priča koja zaokružuje emisiju pozitivnom notom, nakon čega slijedi brzi pregled aktualnosti."
+                    },
+                    {
+                      "title": "Voditeljski zaključak i najava (22:30 - 23:00)",
+                      "visual": null,
+                      "sound": null,
+                      "content": "Neka vas mir i dobro prate kroz tjedan! Hvala vam na gledanju i do iduće nedjelje, kada ćemo se [najava za sljedeću temu]."
+                    },
+                    {
+                      "title": "Odjavna špica (23:00 - 23:30)",
+                      "visual": "Umirujući, lijepi kadrovi prirode, arhitekture crkava (iz raznih kutova), simboli mira, s brzim pojavljivanjem popisa suradnika. Može uključivati adrese društvenih mreža HRT-a i emisije. Sve mora biti sažeto i jasno vidljivo.",
+                      "sound": "Lagana, umirujuća verzija glazbe iz najavne špice, skraćena i s jasnim završetkom.",
+                      "content": null
+                    }
+                  ]
+                }
+              ]
+            };
+
+            // Populate General Info
+            overviewTitle.textContent = data.generalInfo.title;
+            overviewDescription.textContent = data.generalInfo.description;
+            overviewDuration.textContent = data.generalInfo.duration;
+            overviewAudience.textContent = data.generalInfo.targetAudience;
+            overviewConception.textContent = data.generalInfo.conception;
+
+            // Dynamically generate segments and subsegments
+            data.segments.forEach(segment => {
+                const segmentSection = document.createElement('section');
+                segmentSection.id = segment.id;
+                segmentSection.className = 'bg-white rounded-lg shadow-lg p-6 md:p-8 mb-8';
+                segmentSection.innerHTML = `
+                    <h3 class="text-2xl font-bold text-amber-700 mb-4">${segment.title} (${segment.durationMinutes} minute i ${segment.durationMinutes % 1 * 60} sekundi)</h3>
+                `;
+
+                segment.subsegments.forEach(subsegment => {
+                    const accordionItem = document.createElement('div');
+                    accordionItem.className = 'accordion-item mb-4';
+                    accordionItem.innerHTML = `
+                        <h4 class="accordion-header text-xl font-semibold text-stone-800 py-2 border-b border-stone-200 flex justify-between items-center">
+                            ${subsegment.title} <span class="accordion-icon">▼</span>
+                        </h4>
+                        <div class="accordion-content p-2 text-stone-600">
+                            ${subsegment.visual ? `<p class="mb-2">**Vizual:** ${subsegment.visual}</p>` : ''}
+                            ${subsegment.sound ? `<p class="mb-2">**Zvuk:** ${subsegment.sound}</p>` : ''}
+                            ${subsegment.content ? `<p>${subsegment.content}</p>` : ''}
+                        </div>
+                    `;
+                    segmentSection.appendChild(accordionItem);
+                });
+                mainContent.insertBefore(segmentSection, document.getElementById('duration-summary'));
+
+                // Add navigation link for the new segment
+                const navLi = document.createElement('li');
+                navLi.innerHTML = `<a href="#${segment.id}" class="block py-2 px-3 rounded-md hover:bg-amber-700 transition">${segment.title}</a>`;
+                navLinksContainer.appendChild(navLi);
+            });
+
+            // Re-attach event listeners for dynamically created accordion headers
+            const accordionHeaders = document.querySelectorAll('.accordion-header');
+            accordionHeaders.forEach(header => {
+                header.addEventListener('click', () => {
+                    const content = header.nextElementSibling;
+                    const icon = header.querySelector('.accordion-icon');
+                    content.classList.toggle('active');
+                    if (content.classList.contains('active')) {
+                        content.style.maxHeight = content.scrollHeight + 'px';
+                        icon.textContent = '▲';
+                    } else {
+                        content.style.maxHeight = '0';
+                        icon.textContent = '▼';
+                    }
+                });
+            });
+
+            const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+            const navLinks = document.getElementById('nav-links');
+
+            mobileMenuToggle.addEventListener('click', () => {
+                navLinks.classList.toggle('hidden');
+            });
+
+            // Prepare data for the chart from the JSON
+            const segmentDurations = {};
+            data.segments.forEach(segment => {
+                segmentDurations[segment.title] = segment.durationMinutes * 60;
+            });
+
+            const labels = Object.keys(segmentDurations);
+            const chartData = Object.values(segmentDurations);
+
+            const ctx = document.getElementById('durationChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Trajanje (sekunde)',
+                        data: chartData,
+                        backgroundColor: [
+                            '#fbbf24', // amber-400
+                            '#f59e0b', // amber-500
+                            '#d97706', // amber-600
+                            '#b45309', // amber-700
+                            '#92400e'  // amber-800
+                        ],
+                        borderColor: '#f5f5f4',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // Horizontal bar chart
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Trajanje (sekunde)',
+                                color: '#44403c'
+                            },
+                            ticks: {
+                                color: '#44403c'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#44403c',
+                                callback: function(value, index, values) {
+                                    const label = this.getLabelForValue(value);
+                                    if (label.length > 16) {
+                                        return label.split(' ').reduce((acc, word) => {
+                                            if (acc.length === 0 || acc[acc.length - 1].length + word.length + 1 > 16) {
+                                                acc.push(word);
+                                            } else {
+                                                acc[acc.length - 1] += ' ' + word;
+                                            }
+                                            return acc;
+                                        }, []);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.x !== null) {
+                                        const totalSeconds = context.parsed.x;
+                                        const minutes = Math.floor(totalSeconds / 60);
+                                        const seconds = totalSeconds % 60;
+                                        label += `${minutes} min ${seconds} sek`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Smooth scrolling for navigation links
+            document.querySelectorAll('nav a').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    document.querySelector(targetId).scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                     if (navLinks.classList.contains('hidden') && window.innerWidth < 768) {
+                        navLinks.classList.remove('hidden');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
